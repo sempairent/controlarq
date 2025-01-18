@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          Int   @id @default(autoincrement())
+  name        String
+  price       Float
+  createdAt   DateTime @default(now())
+  category Category @relation(fields: [categoryId], references: [id])
+  categoryId  Int
+}
+
+model Category {
+  id          Int   @id @default(autoincrement())
+  name        String
+  products    Product[] 
+}
+
+
+
+
+model Proyecto {
+  id             Int             @id @default(autoincrement())
+  nombre         String
+  descripcion    String
+  lotesSeparados LoteSeparado[]  // Relación uno a muchos
+  lotesVendidos  LoteVendido[]   // Relación uno a muchos
+  depositos      Deposito[]      // Relación uno a muchos
+  planos         Plano[]         // Relación uno a muchos
+}
+
+model Plano {
+  id Int @id @default(autoincrement())
+  x  Float
+  y  Float
+  width Float
+  height Float
+  estado String
+  manlote String
+  proyecto Proyecto @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
+  proyectoId Int
+}
+
+model LoteSeparado {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  apellido  String
+  dni       String @db.VarChar(8)
+  celular   String @db.VarChar(9)
+  mzYLote   String
+  financiado String
+  adelanto  Float
+  total     Float
+  asesor    String
+  proyecto  Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
+  proyectoId Int
+}
+
+model LoteVendido {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  apellido  String
+  dni       String @db.VarChar(8)
+  celular   String @db.VarChar(9)
+  mzYLote   String
+  financiado String
+  adelanto  Float
+  total     Float
+  asesor    String
+  proyecto  Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
+  proyectoId Int
+}
+
+model Deposito {
+  id                 Int       @id @default(autoincrement())
+  fecha              DateTime
+  descripcion        String
+  operacionesBancarias String
+  dinero             Float
+  proyecto           Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
+  proyectoId Int
+}
+
+model user {
+  id         Int      @id @default(autoincrement())
+  email      String   @unique
+  password   String
+  firstName  String
+  lastName   String
+  createdat  DateTime @default(now())
+  role       String   @default("user")
+}
+
+model Informe {
+  id Int @id @default(autoincrement())
+  tarea String
+  descripcion String
+}
