@@ -43,6 +43,32 @@ router.post('/register', async (req, res) => {
         res.status(500).json({ error: 'Ocurrió un error durante el registro.' });
     }
 });
+/*
+router.get('/users', async (req, res) => {
+    const { page = 1, limit = 10 } = req.query;
+
+    try {
+        const users = await prisma.user.findMany({
+            skip: (page - 1) * limit,
+            take: parseInt(limit),
+        });
+
+        const totalUsers = await prisma.user.count();
+
+        res.json({
+            users,
+            totalPages: Math.ceil(totalUsers / limit),
+            currentPage: parseInt(page),
+        });
+    } catch (error) {
+        console.error('Error al obtener los usuarios:', error);
+        res.status(500).json({ error: 'Error al obtener los usuarios.' });
+    }
+});
+*/
+
+
+
 
 
 router.post('/login', async (req, res) => {
@@ -87,6 +113,7 @@ router.post('/login', async (req, res) => {
         res.status(500).json({ error: 'Ocurrió un error durante el login.' });
     }
 });
+
 
 // Ruta para actualizar parcialmente los datos del usuario
 router.patch('/update', async (req, res) => {
@@ -150,31 +177,7 @@ router.get('/profile', async (req, res) => {
     }
 });
 
-// Ruta para eliminar un usuario
-router.delete('/delete/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
 
-        // Verificar si el usuario existe
-        const user = await prisma.user.findUnique({
-            where: { id: Number(id) }
-        });
-
-        if (!user) {
-            return res.status(404).json({ error: 'Usuario no encontrado' });
-        }
-
-        // Eliminar el usuario
-        await prisma.user.delete({
-            where: { id: Number(id) }
-        });
-
-        res.json({ message: 'Usuario eliminado correctamente' });
-    } catch (error) {
-        console.error('Error al eliminar el usuario:', error);
-        res.status(500).json({ error: 'Ocurrió un error al eliminar el usuario.' });
-    }
-});
 
 
 export default router;

@@ -27,7 +27,7 @@ app.use(express.json())
 //app.use('/api', ProductsRoutes)
 //app.use('/api', CategoriesRoutes)
 app.use('/api', authRoutes)
-app.use('/api', Informes)
+app.use('/api',authMiddleware, Informes)
 
 app.use('/api',authMiddleware, Proyectos)
 app.use('/api',authMiddleware, lotesSeparadosRoutes)
