@@ -6,14 +6,14 @@ import { format } from 'date-fns';
 const router = Router();
 
 // Leer todos los depósitos por proyecto
-router.get('/depositos/:proyectoId', async (req, res) => {
-  const { proyectoId } = req.params;
+router.get('/depositos', async (req, res) => {
+  //const { proyectoId } = req.params;
   const {page = 1, limit = 10, descripcion, fechaInicio, fechaFin, operacionesBancarias} = req.query;
 
 
   try {
     const filters = {
-      proyectoId: parseInt(proyectoId),
+     // proyectoId: parseInt(proyectoId),
       ...(descripcion && { descripcion: {contains: descripcion, mode: 'insensitive'}}),
       ...(operacionesBancarias && {operacionesBancarias: {contains: operacionesBancarias, mode: 'insensitive'}}),
       ...(fechaInicio && fechaFin && { 
@@ -25,14 +25,15 @@ router.get('/depositos/:proyectoId', async (req, res) => {
       where: filters,
       skip: (page-1) * limit,
       take: parseInt(limit),
-      orderBy: { fecha: 'asc' },
+      //orderBy: { fecha: 'asc' },
+      orderBy: { id: 'desc' },
     })
     const totalDepositos = await prisma.deposito.count({
       where:filters,
     });
     const formattedDepositos = depositos.map((dep) => ({
       ...dep,
-      fecha: format(dep.fecha, 'dd-MM-yyyy'), // Formato de fecha
+      fecha: format(dep.fecha, 'yyyy-MM-dd'), // Formato de fecha
     }));
 
     res.json({
@@ -49,12 +50,12 @@ router.get('/depositos/:proyectoId', async (req, res) => {
 
 });
 
-router.get('/todosd/:proyectoId', async (req, res) => {
-  const { proyectoId } = req.params;
+router.get('/todosd', async (req, res) => {
+  //const { proyectoId } = req.params;
 
   try {
     const lotes = await prisma.deposito.findMany({
-      where: { proyectoId: parseInt(proyectoId) },
+      orderBy: { id: 'desc' },
     });
     const formattedDepositos = lotes.map((dep) => ({
       ...dep,
@@ -71,7 +72,7 @@ router.get('/todosd/:proyectoId', async (req, res) => {
 
 // Crear un nuevo depósito
 router.post('/depositos', async (req, res) => {
-  const { fecha, descripcion, operacionesBancarias, dinero, proyectoId } = req.body;
+  const { fecha, descripcion, operacionesBancarias,arch , dinero } = req.body;
 
   const [year, month, day] = fecha.split('-');
   const fechaLocal = new Date(year, month - 1, day); // Crear fecha local sin desfase
@@ -83,8 +84,9 @@ router.post('/depositos', async (req, res) => {
         fecha: fechaLocal,
         descripcion,
         operacionesBancarias,
+        arch,
         dinero: dineroNum,
-        proyectoId: parseInt(proyectoId), // Asociar al proyecto
+        //proyectoId: parseInt(proyectoId), // Asociar al proyecto
       },
     });
     res.json(nuevoDeposito);
@@ -94,33 +96,42 @@ router.post('/depositos', async (req, res) => {
   }
 });
 
-// Actualizar un depósito
 router.put('/depositos/:id', async (req, res) => {
   const { id } = req.params;
-  const { fecha, descripcion, operacionesBancarias, dinero, proyectoId } = req.body;
-
-  const [year, month, day] = fecha.split('-');
-  const fechaLocal = new Date(year, month - 1, day); // Crear fecha local sin desfase
+  const { fecha, descripcion, operacionesBancarias, dinero, arch } = req.body;
 
   try {
+    // Verificar si `fecha` es válida antes de procesarla
+    let fechaLocal = null;
+    if (fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) { // Verificar formato YYYY-MM-DD
+      const [year, month, day] = fecha.split('-');
+      fechaLocal = new Date(year, month - 1, day);
+    }
+
+    if (fechaLocal && isNaN(fechaLocal.getTime())) {
+      return res.status(400).json({ error: "Fecha inválida" });
+    }
+
     const dineroNumn = parseFloat(dinero);
 
     const depositoActualizado = await prisma.deposito.update({
       where: { id: parseInt(id) },
       data: {
-        fecha: fechaLocal,
+        ...(fechaLocal && { fecha: fechaLocal }), // Solo actualizar si es válida
         descripcion,
         dinero: dineroNumn,
+        arch,
         operacionesBancarias,
-        //proyectoId: parseInt(proyectoId), // Actualizar proyecto si es necesario
       },
     });
+
     res.json(depositoActualizado);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al actualizar el depósito.' });
   }
 });
+
 
 // Eliminar un depósito
 router.delete('/depositos/:id', async (req, res) => {

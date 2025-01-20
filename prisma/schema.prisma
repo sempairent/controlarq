@@ -37,7 +37,7 @@ model Proyecto {
   descripcion    String
   lotesSeparados LoteSeparado[]  // Relación uno a muchos
   lotesVendidos  LoteVendido[]   // Relación uno a muchos
-  depositos      Deposito[]      // Relación uno a muchos
+  //depositos      Deposito[]      // Relación uno a muchos
   planos         Plano[]         // Relación uno a muchos
 }
 
@@ -88,9 +88,10 @@ model Deposito {
   fecha              DateTime
   descripcion        String
   operacionesBancarias String
+  arch String
   dinero             Float
-  proyecto           Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
-  proyectoId Int
+  //proyecto           Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
+  //proyectoId Int
 }
 
 model user {

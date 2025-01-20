@@ -80,8 +80,8 @@ CREATE TABLE "Deposito" (
     "fecha" TIMESTAMP(3) NOT NULL,
     "descripcion" TEXT NOT NULL,
     "operacionesBancarias" TEXT NOT NULL,
+    "arch" TEXT NOT NULL,
     "dinero" DOUBLE PRECISION NOT NULL,
-    "proyectoId" INTEGER NOT NULL,
 
     CONSTRAINT "Deposito_pkey" PRIMARY KEY ("id")
 );
@@ -122,6 +122,3 @@ ALTER TABLE "LoteSeparado" ADD CONSTRAINT "LoteSeparado_proyectoId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "LoteVendido" ADD CONSTRAINT "LoteVendido_proyectoId_fkey" FOREIGN KEY ("proyectoId") REFERENCES "Proyecto"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Deposito" ADD CONSTRAINT "Deposito_proyectoId_fkey" FOREIGN KEY ("proyectoId") REFERENCES "Proyecto"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

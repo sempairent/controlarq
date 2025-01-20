@@ -35,7 +35,7 @@ router.get('/proyectos/:id', async (req, res) => {
     const { id } = req.params;
     const proyecto = await prisma.proyecto.findUnique({
       where: { id: parseInt(id) },
-      include: { lotesSeparados: true, lotesVendidos: true, depositos: true },
+      include: { lotesSeparados: true, lotesVendidos: true },
     });
     if (!proyecto) {
       return res.status(404).json({ error: 'Proyecto no encontrado' });
