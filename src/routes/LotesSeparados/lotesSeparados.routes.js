@@ -1,46 +1,72 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import multer from 'multer';
+import path from 'path';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-router.post('/separar', async (req, res) => {
-  const { nombre, apellido, dni, celular, mzYLote,financiado, adelanto, total, asesor, proyectoId } = req.body;
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'boletas/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(file.originalname);
+    cb(null, uniqueName);
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Solo se permiten archivos PDF'), false);
+  }
+};
+
+const upload = multer({ storage, fileFilter });
+
+// 🔽 Aquí comienza la ruta que usa multer
+router.post('/separar', upload.single('boleta'), async (req, res) => {
+  // Desestructurar y convertir los campos necesarios
+  const {
+    nombre,
+    apellido,
+    dni,
+    celular,
+    mzYLote,
+    financiado,
+    adelanto,
+    total,
+    asesor,
+    proyectoId
+  } = req.body;
+
+  // Conversión explícita
+  const adelantoFloat = parseFloat(adelanto);
+  const totalFloat = parseFloat(total);
+  const proyectoIdInt = parseInt(proyectoId, 10); // 👈 conversión importante
 
   try {
-    // Verificar si existe un lote con el mismo mzYLote en el mismo proyecto en loteSeparado o loteVendido
+    // Buscar si el lote ya existe
     const loteExistenteEnSeparados = await prisma.loteSeparado.findFirst({
-      where: {
-        mzYLote,
-        proyectoId,
-      },
+      where: { mzYLote, proyectoId: proyectoIdInt },
     });
 
     const loteExistenteEnVendidos = await prisma.loteVendido.findFirst({
-      where: {
-        mzYLote,
-        proyectoId,
-      },
+      where: { mzYLote, proyectoId: proyectoIdInt },
     });
-    /*
-        if (loteExistenteEnSeparados || loteExistenteEnVendidos) {
-          return res.status(400).json({
-            error: `El lote ${mzYLote} ya está reservado o vendido en este proyecto.`,
-          });
-        }
-    */
-    // Verificar en qué tabla está
+
     if (loteExistenteEnSeparados) {
-      return res.status(400).json({
-        error: `El lote ${mzYLote} ya está reservado en Lotes Separados`,
-      });
+      return res.status(400).json({ error: `El lote ${mzYLote} ya está reservado.` });
     }
 
     if (loteExistenteEnVendidos) {
-      return res.status(400).json({
-        error: `El lote ${mzYLote} ya está vendido en Lotes Vendidos`,
-      });
+      return res.status(400).json({ error: `El lote ${mzYLote} ya está vendido.` });
     }
+
+    const boletaPath = req.file ? req.file.path : null;
+
     // Crear el lote separado
     const nuevoLote = await prisma.loteSeparado.create({
       data: {
@@ -50,29 +76,34 @@ router.post('/separar', async (req, res) => {
         celular,
         mzYLote,
         financiado,
-        adelanto: parseFloat(adelanto),
-        total: parseFloat(total),
+        adelanto: adelantoFloat,
+        total: totalFloat,
         asesor,
-        proyectoId, // Asociar al proyecto
+        proyectoId: proyectoIdInt,
+        boleta: boletaPath,
       },
     });
 
-    // Verificar si el adelanto es igual al total y mover a LotesVendidos
-    if (adelanto === total) {
+    // Si ya pagó todo, mover a "vendido"
+    if (adelantoFloat === totalFloat) {
       await prisma.loteSeparado.delete({ where: { id: nuevoLote.id } });
+      const dataToUpdate = {
+        nombre,
+        apellido,
+        dni,
+        celular,
+        mzYLote,
+        financiado,
+        adelanto: adelantoFloat,
+        total: totalFloat,
+        asesor,
+        proyectoId: proyectoIdInt,
+      };
+      if(req.file){
+        dataToUpdate.boleta = req.file.path;
+      }
       const loteVendido = await prisma.loteVendido.create({
-        data: {
-          nombre,
-          apellido,
-          dni,
-          celular,
-          mzYLote,
-          financiado,
-          adelanto,
-          total,
-          asesor,
-          proyectoId, // Mantener asociación al proyecto
-        },
+        data: dataToUpdate,
       });
 
       return res.json({
@@ -81,16 +112,17 @@ router.post('/separar', async (req, res) => {
       });
     }
 
-    //res.json(nuevoLote);
     return res.json({
       message: 'Lote separado creado correctamente.',
       lote: nuevoLote,
-    })
+    });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al crear el lote separado.' });
   }
 });
+
 
 
 // Leer todos los lotes separados por proyecto
@@ -118,8 +150,15 @@ router.get('/separar/:proyectoId', async (req, res) => {
       where: filters,
     });
 
+    const lotesConBoletaUrl = lotes.map((lote) => ({
+      ...lote,
+      boleta: lote.boleta
+        ? `${req.protocol}://${req.get('host')}/${lote.boleta.replace(/\\/g, '/')}`
+        : null,
+    }));
+
     res.json({
-      lotes,
+      lotes: lotesConBoletaUrl,
       totalPages: Math.ceil(totalLotes / limit),
       currentPage: parseInt(page),
     });
@@ -128,6 +167,7 @@ router.get('/separar/:proyectoId', async (req, res) => {
     res.status(500).json({ error: 'Error al obtener los lotes separados.' });
   }
 });
+
 
 router.get('/todos/:proyectoId', async (req, res) => {
   const { proyectoId } = req.params;
@@ -147,20 +187,39 @@ router.get('/todos/:proyectoId', async (req, res) => {
 
 
 // Actualizar un lote separado
-router.put('/separar/:id', async (req, res) => {
+router.put('/separar/:id', upload.single('boleta'), async (req, res) => {
+  console.log('Archivo recibido:', req.file);
+  console.log('req.body:', req.body);
   const { id } = req.params;
-  const { nombre, apellido, dni, celular, mzYLote,financiado, adelanto, total, asesor, proyectoId } = req.body;
+  const {
+    nombre,
+    apellido,
+    dni,
+    celular,
+    mzYLote,
+    financiado,
+    adelanto,
+    total,
+    asesor,
+    proyectoId: proyectoIdRaw,
+  } = req.body;
+
+  const proyectoId = parseInt(proyectoIdRaw);
+  const idInt = parseInt(id);
+  const adelantoNum = parseFloat(adelanto);
+  const totalNum = parseFloat(total);
+
+  if (isNaN(proyectoId) || isNaN(idInt)) {
+    return res.status(400).json({ error: 'ID o proyectoId inválido.' });
+  }
 
   try {
-    const adelantoNum = parseFloat(adelanto);
-    const totalNum = parseFloat(total);
-
     const loteExistenteEnSeparados = await prisma.loteSeparado.findFirst({
       where: {
         mzYLote,
         proyectoId,
         NOT: {
-          id: parseInt(id), // Excluir el lote actual por ID
+          id: idInt,
         },
       },
     });
@@ -170,11 +229,11 @@ router.put('/separar/:id', async (req, res) => {
         mzYLote,
         proyectoId,
         NOT: {
-          id: parseInt(id), // Excluir el lote actual por ID
+          id: idInt,
         },
       },
     });
-    // Verificar en qué tabla está
+
     if (loteExistenteEnSeparados) {
       return res.status(400).json({
         error: `El lote ${mzYLote} ya está reservado en los Lotes Separados.`,
@@ -183,24 +242,30 @@ router.put('/separar/:id', async (req, res) => {
 
     if (loteExistenteEnVendidos) {
       return res.status(400).json({
-        error: `El lote ${mzYLote} ya está vendido en los Lotes Vendidos.`, 
+        error: `El lote ${mzYLote} ya está vendido en los Lotes Vendidos.`,
       });
     }
 
+    const dataToUpdate = {
+      nombre,
+      apellido,
+      dni,
+      celular,
+      mzYLote,
+      financiado,
+      adelanto: adelantoNum,
+      total: totalNum,
+      asesor,
+      proyectoId,
+    };
+
+    if (req.file) {
+      dataToUpdate.boleta = req.file.path;
+    }
+
     const loteActualizado = await prisma.loteSeparado.update({
-      where: { id: parseInt(id) },
-      data: {
-        nombre,
-        apellido,
-        dni,
-        celular,
-        mzYLote,
-        financiado,
-        adelanto: adelantoNum,
-        total: totalNum,
-        asesor,
-        proyectoId, // Actualizar el proyecto si es necesario
-      },
+      where: { id: idInt },
+      data: dataToUpdate,
     });
 
     if (adelantoNum === totalNum) {
@@ -218,6 +283,7 @@ router.put('/separar/:id', async (req, res) => {
           total: loteActualizado.total,
           asesor: loteActualizado.asesor,
           proyectoId: loteActualizado.proyectoId,
+          boleta: loteActualizado.boleta,
         },
       });
 
@@ -227,12 +293,11 @@ router.put('/separar/:id', async (req, res) => {
       });
     }
 
-    //res.json(loteActualizado);
     res.json({
       message: 'El lote ha sido actualizado con éxito.',
       lote: loteActualizado,
     });
-    
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al actualizar el lote separado.' });

@@ -1,51 +1,79 @@
 import { Router } from "express";
 import { prisma } from '../../db.js';
 import { format } from 'date-fns';
+import path from 'path'
+import multer from 'multer'
 
 
 const router = Router();
 
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'boletas/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(file.originalname);
+    cb(null, uniqueName);
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Solo se permiten archivos PDF'), false);
+  }
+};
+
+const upload = multer({ storage, fileFilter });
+
+
 // Leer todos los depósitos por proyecto
 router.get('/depositos', async (req, res) => {
   //const { proyectoId } = req.params;
-  const {page = 1, limit = 10, descripcion, fechaInicio, fechaFin, operacionesBancarias} = req.query;
+  const { page = 1, limit = 10, descripcion, fechaInicio, fechaFin, operacionesBancarias } = req.query;
 
 
   try {
     const filters = {
-     // proyectoId: parseInt(proyectoId),
-      ...(descripcion && { descripcion: {contains: descripcion, mode: 'insensitive'}}),
-      ...(operacionesBancarias && {operacionesBancarias: {contains: operacionesBancarias, mode: 'insensitive'}}),
-      ...(fechaInicio && fechaFin && { 
-        fecha: { gte: new Date(fechaInicio), lte: new Date(fechaFin) } 
+      // proyectoId: parseInt(proyectoId),
+      ...(descripcion && { descripcion: { contains: descripcion, mode: 'insensitive' } }),
+      ...(operacionesBancarias && { operacionesBancarias: { contains: operacionesBancarias, mode: 'insensitive' } }),
+      ...(fechaInicio && fechaFin && {
+        fecha: { gte: new Date(fechaInicio), lte: new Date(fechaFin) }
       }),
     };
 
     const depositos = await prisma.deposito.findMany({
       where: filters,
-      skip: (page-1) * limit,
+      skip: (page - 1) * limit,
       take: parseInt(limit),
       //orderBy: { fecha: 'asc' },
       orderBy: { id: 'desc' },
     })
     const totalDepositos = await prisma.deposito.count({
-      where:filters,
+      where: filters,
     });
-    const formattedDepositos = depositos.map((dep) => ({
-      ...dep,
-      fecha: format(dep.fecha, 'yyyy-MM-dd'), // Formato de fecha
+
+    const formattedDepositos = depositos.map((deposito) => ({
+      ...deposito,
+      fecha: format(deposito.fecha, 'yyyy-MM-dd'),
+      boleta: deposito.boleta
+        ? `${req.protocol}://${req.get('host')}/${deposito.boleta.replace(/\\/g, '/')}`
+        : null,
     }));
 
     res.json({
-      depositos : formattedDepositos,
+
+      depositos: formattedDepositos,
       totalPages: Math.ceil(totalDepositos / limit),
       currentPage: parseInt(page),
     })
-    
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al obtener los depósitos.' });
-    
+
   }
 
 });
@@ -71,14 +99,15 @@ router.get('/todosd', async (req, res) => {
 });
 
 // Crear un nuevo depósito
-router.post('/depositos', async (req, res) => {
-  const { fecha, descripcion, operacionesBancarias,arch , dinero } = req.body;
+router.post('/depositos', upload.single('boleta'), async (req, res) => {
+  const { fecha, descripcion, operacionesBancarias, arch, dinero } = req.body;
 
   const [year, month, day] = fecha.split('-');
   const fechaLocal = new Date(year, month - 1, day); // Crear fecha local sin desfase
 
   try {
     const dineroNum = parseFloat(dinero);
+    const boletaPath = req.file ? req.file.path : null;
     const nuevoDeposito = await prisma.deposito.create({
       data: {
         fecha: fechaLocal,
@@ -86,6 +115,7 @@ router.post('/depositos', async (req, res) => {
         operacionesBancarias,
         arch,
         dinero: dineroNum,
+        boleta: boletaPath,
         //proyectoId: parseInt(proyectoId), // Asociar al proyecto
       },
     });
@@ -96,7 +126,7 @@ router.post('/depositos', async (req, res) => {
   }
 });
 
-router.put('/depositos/:id', async (req, res) => {
+router.put('/depositos/:id',upload.single('boleta'), async (req, res) => {
   const { id } = req.params;
   const { fecha, descripcion, operacionesBancarias, dinero, arch } = req.body;
 
@@ -114,16 +144,26 @@ router.put('/depositos/:id', async (req, res) => {
 
     const dineroNumn = parseFloat(dinero);
 
+    // Construir el objeto de datos a actualizar
+    const dataToUpdate = {
+      ...(fechaLocal && { fecha: fechaLocal }), // Actualizar solo si es válida
+      descripcion,
+      dinero: dineroNumn,
+      arch,
+      operacionesBancarias,
+    };
+
+    // Si se subió una nueva boleta, incluirla
+    if (req.file) {
+      dataToUpdate.boleta = req.file.path;
+    }
+
+    // Actualizar en la base de datos
     const depositoActualizado = await prisma.deposito.update({
       where: { id: parseInt(id) },
-      data: {
-        ...(fechaLocal && { fecha: fechaLocal }), // Solo actualizar si es válida
-        descripcion,
-        dinero: dineroNumn,
-        arch,
-        operacionesBancarias,
-      },
+      data: dataToUpdate,
     });
+
 
     res.json(depositoActualizado);
   } catch (error) {

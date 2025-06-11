@@ -64,6 +64,7 @@ model LoteSeparado {
   adelanto  Float
   total     Float
   asesor    String
+  boleta    String?
   proyecto  Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
   proyectoId Int
 }
@@ -79,6 +80,7 @@ model LoteVendido {
   adelanto  Float
   total     Float
   asesor    String
+  boleta    String?
   proyecto  Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
   proyectoId Int
 }
@@ -90,6 +92,7 @@ model Deposito {
   operacionesBancarias String
   arch String
   dinero             Float
+  boleta    String?
   //proyecto           Proyecto  @relation(fields: [proyectoId], references: [id]) // Relación con Proyecto
   //proyectoId Int
 }
@@ -108,4 +111,5 @@ model Informe {
   id Int @id @default(autoincrement())
   tarea String
   descripcion String
+  boleta    String?
 }

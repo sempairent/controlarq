@@ -1,8 +1,30 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import multer from 'multer'
+import path from 'path'
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'boletas/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(file.originalname);
+    cb(null, uniqueName);
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Solo se permiten archivos PDF'), false);
+  }
+};
+
+const upload = multer({ storage, fileFilter });
 
 /*
 router.get('/', async (req, res) => {
@@ -55,8 +77,15 @@ router.get('/informes', async (req, res) => {
       where: filters,
     });
 
+    const formatoBoleta = lotes.map((lote) =>({
+      ...lote,
+      boleta: lote.boleta
+      ? `${req.protocol}://${req.get('host')}/${lote.boleta.replace(/\\/g, '/')}`
+        : null,
+    }));
+
     res.json({
-      lotes,
+      lotes: formatoBoleta,
       totalPages: Math.ceil(totalLotes / limit),
       currentPage: parseInt(page),
     });
@@ -103,7 +132,7 @@ router.get("/informes/:id", async (req, res) => {
 });
 
 // Crear un nuevo informe
-router.post("/informes", async (req, res) => {
+router.post("/informes", upload.single('boleta'), async (req, res) => {
   const { tarea, descripcion } = req.body;
 
   if (!tarea || !descripcion) {
@@ -111,8 +140,13 @@ router.post("/informes", async (req, res) => {
   }
 
   try {
+    const boletaPath = req.file ? req.file.path : null;
     const nuevoInforme = await prisma.informe.create({
-      data: { tarea, descripcion }
+      data: { 
+        tarea, 
+        descripcion,
+        boleta: boletaPath, 
+      }
     });
 
 
@@ -127,7 +161,7 @@ router.post("/informes", async (req, res) => {
 });
 
 // Actualizar un informe por ID
-router.put("/informes/:id", async (req, res) => {
+router.put("/informes/:id",upload.single('boleta'), async (req, res) => {
   const { id } = req.params;
   const { tarea, descripcion } = req.body;
 
@@ -139,10 +173,16 @@ router.put("/informes/:id", async (req, res) => {
     if (!informeExistente) {
       return res.status(404).json({ error: "Informe no encontrado" });
     }
+    const boletaPath = req.file ? req.file.path : null;
+    const dataToUpdate = {
+      tarea,
+      descripcion,
+      boleta: boletaPath,
+    }
 
     const informeActualizado = await prisma.informe.update({
       where: { id: Number(id) },
-      data: { tarea, descripcion }
+      data: dataToUpdate,
     });
 
     res.json({

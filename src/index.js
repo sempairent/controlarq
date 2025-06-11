@@ -34,6 +34,8 @@ app.use('/api',authMiddleware, lotesSeparadosRoutes)
 app.use('/api',authMiddleware, lotesVendidosRoutes)
 app.use('/api',authMiddleware, Depositos)
 app.use('/api',authMiddleware, Plano)
+app.use('/boletas', express.static('boletas'));
+
 
 
 app.listen(3000)
